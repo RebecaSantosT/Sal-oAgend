@@ -1,22 +1,24 @@
 document.addEventListener('DOMContentLoaded', async function () {
     // =========================================================
-    // COLE AQUI AS CHAVES DO SEU PROJETO NO SUPABASE
+    // CONEXÃO DIRETA VIA API REST DO SUPABASE (SEM BIBLIOTECA EXTERNA)
     // =========================================================
-    var SUPABASE_URL = https//rvqlfpfrhdjbszfhcwpj.supabase.co/rest/v1/;
-    var SUPABASE_ANON_KEY = sb_publishable_goH5wgjtyJejXvKYVa1E6A_bU2AYkeX;
+    var SUPABASE_URL = "https://rvqlfpfrhdjbszfhcwpj.supabase.co";
+    var SUPABASE_ANON_KEY = "sb_publishable_goH5wgjtyJejXvKYVa1E6A_bU2AYkeX";
+    var API_ENDPOINT = SUPABASE_URL + "/rest/v1/agendamentos";
 
-    var supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    var HEADERS_DB = {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+    };
 
-    // =========================================================
-    // CONFIGURAÇÕES DO PIX E ACESSO ADMIN
-    // =========================================================
     var CHAVE_PIX_EMAIL = "bekka.santos77@gmail.com";
     var NOME_RECEBEDOR = "Rebeca Dos Santos Teixeir";
     var CIDADE_RECEBEDOR = "RIO DE JANEIRO";
     var VALOR_RESERVA = "50.00";
     var SENHA_ADMIN = "admin123";
 
-    // Cache local sincronizado com o Supabase
     var agendamentosCache = [];
 
     // =========================================================
@@ -64,57 +66,76 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     // =========================================================
-    // BANCO DE DADOS NA NUVEM (SUPABASE)
+    // BANCO DE DADOS NA NUVEM VIA FETCH NATIVO
     // =========================================================
     var CloudDB = {
         sincronizar: async function () {
-            var res = await supabaseClient
-                .from('agendamentos')
-                .select('*')
-                .order('id', { ascending: true });
-
-            if (!res.error && res.data) {
-                agendamentosCache = res.data;
+            try {
+                var resposta = await fetch(API_ENDPOINT + "?select=*&order=id.asc", {
+                    method: "GET",
+                    headers: HEADERS_DB
+                });
+                if (resposta.ok) {
+                    agendamentosCache = await resposta.json();
+                }
+            } catch (e) {
+                console.error("Erro ao sincronizar:", e);
             }
             return agendamentosCache;
         },
         inserir: async function (registro) {
-            var res = await supabaseClient
-                .from('agendamentos')
-                .insert([registro]);
+            var resposta = await fetch(API_ENDPOINT, {
+                method: "POST",
+                headers: HEADERS_DB,
+                body: JSON.stringify(registro)
+            });
 
-            if (res.error) throw res.error;
+            if (!resposta.ok) {
+                var erroTxt = await resposta.text();
+                throw new Error("Falha ao salvar (" + resposta.status + "): " + erroTxt);
+            }
             await this.sincronizar();
             return registro;
         },
         atualizarDataTurno: async function (id, novaData, novoTurno) {
-            var res = await supabaseClient
-                .from('agendamentos')
-                .update({ data: novaData, turno: novoTurno })
-                .eq('id', id);
+            var resposta = await fetch(API_ENDPOINT + "?id=eq." + id, {
+                method: "PATCH",
+                headers: HEADERS_DB,
+                body: JSON.stringify({ data: novaData, turno: novoTurno })
+            });
 
-            if (res.error) throw res.error;
+            if (!resposta.ok) {
+                var erroTxt = await resposta.text();
+                throw new Error("Falha ao reagendar: " + erroTxt);
+            }
             await this.sincronizar();
         },
         atualizarStatus: async function (id, novoStatus) {
-            var res = await supabaseClient
-                .from('agendamentos')
-                .update({ status: novoStatus })
-                .eq('id', id);
+            var resposta = await fetch(API_ENDPOINT + "?id=eq." + id, {
+                method: "PATCH",
+                headers: HEADERS_DB,
+                body: JSON.stringify({ status: novoStatus })
+            });
 
-            if (res.error) throw res.error;
+            if (!resposta.ok) {
+                var erroTxt = await resposta.text();
+                throw new Error("Falha ao atualizar status: " + erroTxt);
+            }
             await this.sincronizar();
             return agendamentosCache.find(function (item) {
                 return item.id === id;
             });
         },
         remover: async function (id) {
-            var res = await supabaseClient
-                .from('agendamentos')
-                .delete()
-                .eq('id', id);
+            var resposta = await fetch(API_ENDPOINT + "?id=eq." + id, {
+                method: "DELETE",
+                headers: HEADERS_DB
+            });
 
-            if (res.error) throw res.error;
+            if (!resposta.ok) {
+                var erroTxt = await resposta.text();
+                throw new Error("Falha ao excluir: " + erroTxt);
+            }
             await this.sincronizar();
         },
         buscarPorTelefone: function (telefone) {
@@ -254,7 +275,6 @@ document.addEventListener('DOMContentLoaded', async function () {
                     celula.classList.add('dia-impar');
                     celula.title = 'Atendimento apenas nos dias pares';
                 } else if (disp.diaLotado) {
-                } else if (disp.diaLotado) {
                     celula.classList.add('dia-lotado');
                     celula.title = 'Sem horários disponíveis neste dia (Manhã e Tarde ocupados)';
                     if (dataSelecionadaISO === dataString) {
@@ -319,6 +339,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
+    var inputDataAgendamento = document.getElementById('dataAgendamento');
+    if (inputDataAgendamento) {
+        inputDataAgendamento.addEventListener('change', function () {
+            atualizarOpcoesTurnos(this.value, 'turno', null);
+        });
+    }
+
     var inputNovaData = document.getElementById('novaData');
     if (inputNovaData) {
         inputNovaData.addEventListener('change', function () {
@@ -331,8 +358,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     var btnAbrirAgendar = document.getElementById('btnAbrirAgendar');
     if (btnAbrirAgendar && modalAgendar) {
         btnAbrirAgendar.addEventListener('click', async function () {
-            await CloudDB.sincronizar();
-            renderizarCalendario();
             if (dataSelecionadaISO && inputDataAgendamento) {
                 inputDataAgendamento.value = dataSelecionadaISO;
                 atualizarOpcoesTurnos(dataSelecionadaISO, 'turno', null);
@@ -340,24 +365,27 @@ document.addEventListener('DOMContentLoaded', async function () {
                 atualizarOpcoesTurnos('', 'turno', null);
             }
             modalAgendar.classList.remove('oculto');
+            await CloudDB.sincronizar();
+            renderizarCalendario();
+            if (inputDataAgendamento && inputDataAgendamento.value) {
+                atualizarOpcoesTurnos(inputDataAgendamento.value, 'turno', null);
+            }
         });
     }
 
     var btnAbrirConsultar = document.getElementById('btnAbrirConsultar');
     if (btnAbrirConsultar && modalConsultar) {
         btnAbrirConsultar.addEventListener('click', async function () {
-            await CloudDB.sincronizar();
             var res = document.getElementById('resultadoConsulta');
             if (res) res.classList.add('oculto');
             modalConsultar.classList.remove('oculto');
+            await CloudDB.sincronizar();
         });
     }
 
     var btnAbrirReagendar = document.getElementById('btnAbrirReagendar');
     if (btnAbrirReagendar && modalReagendar) {
         btnAbrirReagendar.addEventListener('click', async function () {
-            await CloudDB.sincronizar();
-            renderizarCalendario();
             if (dataSelecionadaISO && inputNovaData) {
                 inputNovaData.value = dataSelecionadaISO;
                 atualizarOpcoesTurnos(dataSelecionadaISO, 'novoTurno', null);
@@ -365,6 +393,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 atualizarOpcoesTurnos('', 'novoTurno', null);
             }
             modalReagendar.classList.remove('oculto');
+            await CloudDB.sincronizar();
+            renderizarCalendario();
         });
     }
 
@@ -392,7 +422,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     });
 
-    // FLUXO 1: NOVO AGENDAMENTO NA NUVEM
     var formAgendar = document.getElementById('formAgendar');
     if (formAgendar) {
         formAgendar.addEventListener('submit', async function (e) {
@@ -455,7 +484,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
                 if (modalPix) modalPix.classList.remove('oculto');
             } catch (err) {
-                alert('Erro ao salvar agendamento no banco online: ' + err.message);
+                alert('Erro ao salvar no banco online: ' + err.message);
             }
         });
     }
@@ -506,7 +535,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    // FLUXO 2: CONSULTAR AGENDAMENTO
     var formConsultar = document.getElementById('formConsultar');
     if (formConsultar) {
         formConsultar.addEventListener('submit', async function (e) {
@@ -532,7 +560,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    // FLUXO 3: REAGENDAR HORÁRIO
     var formReagendar = document.getElementById('formReagendar');
     if (formReagendar) {
         formReagendar.addEventListener('submit', async function (e) {
@@ -575,90 +602,105 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-// FLUXO 4: PAINEL ADMINISTRATIVO
     var btnAbrirAdmin = document.getElementById('btnAbrirAdmin');
     if (btnAbrirAdmin && modalAdmin) {
-    btnAbrirAdmin.addEventListener('click', function () {
-    modalAdmin.classList.remove('oculto');
-    });
+        btnAbrirAdmin.addEventListener('click', function () {
+            modalAdmin.classList.remove('oculto');
+        });
     }
+
     var formLoginAdmin = document.getElementById('formLoginAdmin');
     if (formLoginAdmin) {
-    formLoginAdmin.addEventListener('submit', async function (e) {
-    e.preventDefault();
-    var senhaDigitada = document.getElementById('senhaAdmin').value;
-    if (senhaDigitada === SENHA_ADMIN) {
-    document.getElementById('adminLoginBox').classList.add('oculto');
-    document.getElementById('adminPainelConteudo').classList.remove('oculto');
-    await CloudDB.sincronizar();
-    renderizarPainelAdmin();
-    } else {
-    alert('Senha incorreta!');
+        formLoginAdmin.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var senhaDigitada = document.getElementById('senhaAdmin').value;
+            if (senhaDigitada === SENHA_ADMIN) {
+                document.getElementById('adminLoginBox').classList.add('oculto');
+                document.getElementById('adminPainelConteudo').classList.remove('oculto');
+                await CloudDB.sincronizar();
+                renderizarPainelAdmin();
+            } else {
+                alert('Senha incorreta!');
+            }
+        });
     }
-    });
-    }
+
     function renderizarPainelAdmin() {
-    var container = document.getElementById('listaAgendamentosAdmin');
-    var contador = document.getElementById('contadorRegistros');
-    if (contador) contador.textContent = agendamentosCache.length + ' agendamento(s) na nuvem';
-    if (!container) return;
-    container.innerHTML = '';
-    if (agendamentosCache.length === 0) {
-    var vazio = document.createElement('p');
-    vazio.style.textAlign = 'center';
-    vazio.style.padding = '1.5rem';
-    vazio.textContent = 'Nenhum agendamento registrado ainda.';
-    container.appendChild(vazio);
-    return;
+        var container = document.getElementById('listaAgendamentosAdmin');
+        var contador = document.getElementById('contadorRegistros');
+
+        if (contador) contador.textContent = agendamentosCache.length + ' agendamento(s) na nuvem';
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (agendamentosCache.length === 0) {
+            var vazio = document.createElement('p');
+            vazio.style.textAlign = 'center';
+            vazio.style.padding = '1.5rem';
+            vazio.textContent = 'Nenhum agendamento registrado ainda.';
+            container.appendChild(vazio);
+            return;
+        }
+
+        agendamentosCache.forEach(function (item) {
+            var card = document.createElement('div');
+            card.classList.add('card-registro-admin');
+
+            var isConfirmado = item.status === 'Confirmado';
+
+            var infoDiv = document.createElement('div');
+            infoDiv.classList.add('info-registro');
+
+            var titulo = document.createElement('h4');
+            titulo.textContent = item.nome + ' ' + item.sobrenome;
+
+            var detalhes = document.createElement('p');
+            detalhes.textContent = '📞 ' + item.telefone + ' | 📅 ' + formatarDataBR(item.data) + ' (' + item.turno + ')';
+
+            var statusSpan = document.createElement('span');
+            statusSpan.classList.add('status-tag', isConfirmado ? 'confirmado' : 'aguardando');
+            statusSpan.textContent = item.status;
+
+            infoDiv.appendChild(titulo);
+            infoDiv.appendChild(detalhes);
+            infoDiv.appendChild(statusSpan);
+
+            var acoesDiv = document.createElement('div');
+            acoesDiv.classList.add('acoes-registro');
+
+            if (!isConfirmado) {
+                var btnValidar = document.createElement('button');
+                btnValidar.classList.add('btn-aprovar');
+                btnValidar.textContent = '✓ Validar';
+                btnValidar.addEventListener('click', async function () {
+                    await CloudDB.atualizarStatus(item.id, 'Confirmado');
+                    renderizarPainelAdmin();
+                    renderizarCalendario();
+                });
+                acoesDiv.appendChild(btnValidar);
+            }
+
+            var btnExcluir = document.createElement('button');
+            btnExcluir.classList.add('btn-excluir');
+            btnExcluir.textContent = 'Excluir';
+            btnExcluir.addEventListener('click', async function () {
+                if (confirm('Deseja realmente remover este agendamento?')) {
+                    await CloudDB.remover(item.id);
+                    renderizarPainelAdmin();
+                    renderizarCalendario();
+                }
+            });
+            acoesDiv.appendChild(btnExcluir);
+
+            card.appendChild(infoDiv);
+            card.appendChild(acoesDiv);
+            container.appendChild(card);
+        });
     }
-    agendamentosCache.forEach(function (item) {
-    var card = document.createElement('div');
-    card.classList.add('card-registro-admin');
-    var isConfirmado = item.status === 'Confirmado';
-    var infoDiv = document.createElement('div');
-    infoDiv.classList.add('info-registro');
-    var titulo = document.createElement('h4');
-    titulo.textContent = item.nome + ' ' + item.sobrenome;
-    var detalhes = document.createElement('p');
-    detalhes.textContent = '📞 ' + item.telefone + ' | 📅 ' + formatarDataBR(item.data) + ' (' + item.turno + ')';
-    var statusSpan = document.createElement('span');
-    statusSpan.classList.add('status-tag', isConfirmado ? 'confirmado' : 'aguardando');
-    statusSpan.textContent = item.status;
-    infoDiv.appendChild(titulo);
-    infoDiv.appendChild(detalhes);
-    infoDiv.appendChild(statusSpan);
-    var acoesDiv = document.createElement('div');
-    acoesDiv.classList.add('acoes-registro');
-    if (!isConfirmado) {
-    var btnValidar = document.createElement('button');
-    btnValidar.classList.add('btn-aprovar');
-    btnValidar.textContent = '✓ Validar';
-    btnValidar.addEventListener('click', async function () {
-    await CloudDB.atualizarStatus(item.id, 'Confirmado');
-    renderizarPainelAdmin();
-    renderizarCalendario();
-    });
-    acoesDiv.appendChild(btnValidar);
-    }
-    var btnExcluir = document.createElement('button');
-    btnExcluir.classList.add('btn-excluir');
-    btnExcluir.textContent = 'Excluir';
-    btnExcluir.addEventListener('click', async function () {
-    if (confirm('Deseja realmente remover este agendamento?')) {
-    await CloudDB.remover(item.id);
-    renderizarPainelAdmin();
-    renderizarCalendario();
-    }
-    });
-    acoesDiv.appendChild(btnExcluir);
-    card.appendChild(infoDiv);
-    card.appendChild(acoesDiv);
-    container.appendChild(card);
-    });
-    }
+
     var btnExportarDB = document.getElementById('btnExportarDB');
-        if (btnExportarDB) {
-            btnExportarDB.addEventListener('click', function () {
+    if (btnExportarDB) {
+        btnExportarDB.addEventListener('click', function () {
             var dados = JSON.stringify(agendamentosCache, null, 2);
             var blob = new Blob([dados], { type: 'application/json' });
             var url = URL.createObjectURL(blob);
@@ -666,10 +708,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             a.href = url;
             a.download = 'backup-bkstudio-' + new Date().toISOString().slice(0, 10) + '.json';
             a.click();
-            });
-        }
+        });
+    }
 
-    // Carrega dados da nuvem ao abrir o site
+    renderizarCalendario();
     await CloudDB.sincronizar();
     renderizarCalendario();
-    });
+});

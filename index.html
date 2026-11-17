@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BkStudio Beauty — Agendamento</title>
+    <link rel="preconnect" href="https://googleapis.com">
+    <link rel="preconnect" href="https://gstatic.com" crossorigin>
+    <link href="https://googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="topo">
+        <div class="topo-conteudo">
+            <span class="tag-destaque">BkStudio Beauty • Atendimento Personalizado</span>
+            <h1>Reserve o Seu Momento</h1>
+            <p>Confira as informações importantes abaixo e escolha seu turno de atendimento.</p>
+        </div>
+    </header>
+
+    <main class="home-container">
+        
+        <!-- Painel de Ações -->
+        <section class="painel-acoes">
+            <button id="btnAbrirAgendar" class="btn btn-primario">
+                <span class="icone">✦</span> Agendamento
+            </button>
+            <button id="btnAbrirConsultar" class="btn btn-secundario">
+                <span class="icone">⌕</span> Consultar Agendamento
+            </button>
+            <button id="btnAbrirReagendar" class="btn btn-terciario">
+                <span class="icone">↻</span> Reagendar Horário
+            </button>
+        </section>
+
+        <!-- Feedback na Tela -->
+        <div id="mensagemFeedback" class="feedback oculto"></div>
+
+        <!-- AVISO EM DESTAQUE -->
+        <section class="aviso-destaque">
+            <div class="aviso-cabecalho">
+                <span class="aviso-badge">Informações Importantes</span>
+                <h3>Para garantir seu horário e evitar imprevistos, seguiremos o mesmo formato do ano passado:</h3>
+            </div>
+            
+            <div class="aviso-lista">
+                <div class="aviso-item">
+                    <span class="aviso-emoji">📌</span>
+                    <p><strong>Reserva de horário:</strong> será necessário o pagamento de uma taxa de <strong>R$ 50,00</strong>, não reembolsável em caso de desistência, mas que será totalmente abatida do valor do procedimento no dia do atendimento.</p>
+                </div>
+
+                <div class="aviso-item">
+                    <span class="aviso-emoji">📅</span>
+                    <p><strong>Disponibilidade:</strong> neste mês, estarei atendendo apenas nos <strong>dias pares</strong>. Então, não deixe para a última hora!</p>
+                </div>
+
+                <div class="aviso-item aviso-alerta">
+                    <span class="aviso-emoji">⚠️</span>
+                    <p><strong>Atenção ao dia 24/12:</strong> não serão realizados alisamentos ou procedimentos químicos demorados, devido à organização dos atendimentos para essa data.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Calendário Visual -->
+        <section class="calendario-card">
+            <div class="calendario-header">
+                <button id="mesAnterior" class="btn-nav" title="Mês Anterior">&lsaquo;</button>
+                <div class="mes-titulo">
+                    <h2 id="mesAnoAtual">Novembro 2026</h2>
+                    <span id="diaSelecionadoTexto">Selecione um dia par disponível</span>
+                </div>
+                <button id="mesProximo" class="btn-nav" title="Próximo Mês">&rsaquo;</button>
+            </div>
+
+            <div class="dias-semana">
+                <div>Dom</div>
+                <div>Seg</div>
+                <div>Ter</div>
+                <div>Qua</div>
+                <div>Qui</div>
+                <div>Sex</div>
+                <div>Sáb</div>
+            </div>
+
+            <div id="gradeDias" class="grade-dias"></div>
+
+            <div class="calendario-legenda">
+                <span class="legenda-item"><i class="bolinha disponivel"></i> Dia Par (Livre)</span>
+                <span class="legenda-item"><i class="bolinha aguardando"></i> Aguardando Validação</span>
+                <span class="legenda-item"><i class="bolinha ocupado"></i> Horário Confirmado</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Rodapé com Acesso Restrito do Administrador -->
+    <footer class="rodape">
+        <p>© 2026 BkStudio Beauty — Todos os direitos reservados</p>
+        <button id="btnAbrirAdmin" class="btn-admin-discreto">🔒 Acesso Profissional</button>
+    </footer>
+
+    <!-- MODAL 1: AGENDAMENTO -->
+    <div id="modalAgendar" class="modal oculto">
+        <div class="modal-conteudo">
+            <button class="fechar" data-modal="modalAgendar">&times;</button>
+            <h2>Novo Agendamento</h2>
+            <p class="subtitulo-modal">Preencha seus dados para gerar a reserva Pix.</p>
+            
+            <form id="formAgendar">
+                <div class="campo-duplo">
+                    <div class="campo">
+                        <label for="nome">Nome *</label>
+                        <input type="text" id="nome" placeholder="Ex: Maria" required>
+                    </div>
+                    <div class="campo">
+                        <label for="sobrenome">Sobrenome *</label>
+                        <input type="text" id="sobrenome" placeholder="Ex: Silva" required>
+                    </div>
+                </div>
+
+                <div class="campo">
+                    <label for="telefone">Telefone para Contato *</label>
+                    <input type="tel" id="telefone" placeholder="(00) 00000-0000" required>
+                </div>
+
+                <div class="campo">
+                    <label for="dataAgendamento">Data (Apenas dias pares) *</label>
+                    <input type="date" id="dataAgendamento" required>
+                </div>
+
+                <div class="campo">
+                    <label>Turno Fixo *</label>
+                    <div class="turnos-opcoes">
+                        <label class="turno-card">
+                            <input type="radio" name="turno" value="Manhã" required>
+                            <span class="turno-box">☀️ Manhã</span>
+                        </label>
+                        <label class="turno-card">
+                            <input type="radio" name="turno" value="Tarde" required>
+                            <span class="turno-box">🌤️ Tarde</span>
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primario btn-full">Confirmar Agendamento</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL PIX -->
+    <div id="modalPix" class="modal oculto">
+        <div class="modal-conteudo modal-centralizado">
+            <button class="fechar" data-modal="modalPix">&times;</button>
+            <span class="badge-pix">Taxa de Reserva: R$ 50,00</span>
+            <h2>Pagamento via Pix</h2>
+            <p class="subtitulo-modal">Favorecido: <strong>Rebeca Dos Santos Teixeira</strong><br>Escaneie o QR Code ou copie o código abaixo.</p>
+
+            <div class="qr-container">
+                <img id="qrCodeImagem" src="" alt="QR Code Pix BkStudio Beauty">
+            </div>
+
+            <div class="chave-pix-box">
+                <label>Pix Copia e Cola (Código do QR Code):</label>
+                <div class="copiar-grupo">
+                    <input type="text" id="pixCopiaColaInput" readonly>
+                    <button type="button" class="btn-copiar" data-target="pixCopiaColaInput">Copiar</button>
+                </div>
+            </div>
+
+            <div class="chave-pix-box">
+                <label>Ou copie a Chave Pix (E-mail):</label>
+                <div class="copiar-grupo">
+                    <input type="text" id="chavePixInput" value="bekka.santos77@gmail.com" readonly>
+                    <button type="button" class="btn-copiar" data-target="chavePixInput">Copiar</button>
+                </div>
+            </div>
+
+            <button type="button" id="btnConfirmarPagamento" class="btn btn-primario btn-full">
+                ✓ Confirmar Pagamento
+            </button>
+        </div>
+    </div>
+
+    <!-- POP-UP LEMBRETE WHATSAPP -->
+    <div id="modalWhatsapp" class="modal oculto">
+        <div class="modal-conteudo modal-centralizado">
+            <button class="fechar" data-modal="modalWhatsapp">&times;</button>
+            <div class="icone-alerta-wpp">📲</div>
+            <h2>Quase lá! Falta só o comprovante</h2>
+            <p class="texto-lembrete">
+                Seu horário ficará com status <strong>Aguardando Validação</strong> até confirmarmos o recebimento. 
+                Não esqueça de enviar o comprovante agora mesmo!
+            </p>
+
+            <a id="linkWhatsappComprovante" 
+               href="https://wa.me" 
+               target="_blank" 
+               rel="noopener noreferrer" 
+               class="btn-whatsapp">
+                💬 Enviar comprovante via WhatsApp
+            </a>
+
+            <button type="button" id="btnConcluirFluxo" class="btn-link-fechar">
+                Já enviei, fechar janela
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL 2: CONSULTAR AGENDAMENTO -->
+    <div id="modalConsultar" class="modal oculto">
+        <div class="modal-conteudo">
+            <button class="fechar" data-modal="modalConsultar">&times;</button>
+            <h2>Consultar Agendamento</h2>
+            <p class="subtitulo-modal">Digite o telefone utilizado na sua inscrição.</p>
+            <form id="formConsultar">
+                <div class="campo">
+                    <label for="telefoneConsulta">Telefone cadastrado *</label>
+                    <input type="tel" id="telefoneConsulta" placeholder="(00) 00000-0000" required>
+                </div>
+                <button type="submit" class="btn btn-secundario btn-full">Buscar Agendamento</button>
+            </form>
+            <div id="resultadoConsulta" class="resultado-box oculto"></div>
+        </div>
+    </div>
+    
+        <!-- MODAL 3: REAGENDAR HORÁRIO -->
+    <div id="modalReagendar" class="modal oculto">
+        <div class="modal-conteudo">
+            <button class="fechar" data-modal="modalReagendar">&times;</button>
+            <h2>Reagendar Horário</h2>
+            <p class="subtitulo-modal">Informe seu telefone e escolha a nova data e turno.</p>
+            <form id="formReagendar">
+                <div class="campo">
+                    <label for="telefoneReagendar">Telefone cadastrado *</label>
+                    <input type="tel" id="telefoneReagendar" placeholder="(00) 00000-0000" required>
+                </div>
+                <div class="campo">
+                    <label for="novaData">Nova Data (Apenas dias pares) *</label>
+                    <input type="date" id="novaData" required>
+                </div>
+                <div class="campo">
+                    <label>Novo Turno Fixo *</label>
+                    <div class="turnos-opcoes">
+                        <label class="turno-card">
+                            <input type="radio" name="novoTurno" value="Manhã" required>
+                            <span class="turno-box">☀️ Manhã</span>
+                        </label>
+                        <label class="turno-card">
+                            <input type="radio" name="novoTurno" value="Tarde" required>
+                            <span class="turno-box">🌤️ Tarde</span>
+                        </label>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-terciario btn-full">Atualizar Horário</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 4: PAINEL ADMIN -->
+    <div id="modalAdmin" class="modal oculto">
+        <div class="modal-conteudo modal-admin-grande">
+            <button class="fechar" data-modal="modalAdmin">&times;</button>
+            <h2>Painel de Validação</h2>
+            <p class="subtitulo-modal">Gerencie os agendamentos e aprove os pagamentos recebidos.</p>
+
+            <div id="adminLoginBox">
+                <form id="formLoginAdmin">
+                    <div class="campo">
+                        <label for="senhaAdmin">Senha de Acesso</label>
+                        <input type="password" id="senhaAdmin" placeholder="Digite a senha" required>
+                    </div>
+                    <button type="submit" class="btn btn-primario btn-full">Entrar no Painel</button>
+                </form>
+            </div>
+
+            <div id="adminPainelConteudo" class="oculto">
+                <div class="admin-topo-acoes">
+                    <span id="contadorRegistros">0 registros encontrados</span>
+                    <button type="button" id="btnExportarDB" class="btn-exportar">⬇ Baixar Backup (.json)</button>
+                </div>
+                <div id="listaAgendamentosAdmin" class="lista-admin"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
+

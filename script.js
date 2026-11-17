@@ -516,7 +516,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     var linkWpp = document.getElementById('linkWhatsappComprovante');
                     if (linkWpp) {
                         var msg = 'Segue comprovante de agendamento: ' + registroAtualizado.nome + ' ' + registroAtualizado.sobrenome + ' - Dia ' + formatarDataBR(registroAtualizado.data) + ' (' + registroAtualizado.turno + ')';
-                        linkWpp.href = 'https://wa.me/5585987375802' + encodeURIComponent(msg);
+                        linkWpp.href = 'https://wa.me/5585987375802?text=.' + encodeURIComponent(msg);
                     }
                 }
             }

@@ -1,10 +1,23 @@
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
+    // =========================================================
+    // COLE AQUI AS CHAVES DO SEU PROJETO NO SUPABASE
+    // =========================================================
+    var SUPABASE_URL = https//rvqlfpfrhdjbszfhcwpj.supabase.co/rest/v1/;
+    var SUPABASE_ANON_KEY = sb_publishable_goH5wgjtyJejXvKYVa1E6A_bU2AYkeX;
+
+    var supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // =========================================================
+    // CONFIGURAÇÕES DO PIX E ACESSO ADMIN
+    // =========================================================
     var CHAVE_PIX_EMAIL = "bekka.santos77@gmail.com";
     var NOME_RECEBEDOR = "Rebeca Dos Santos Teixeir";
     var CIDADE_RECEBEDOR = "RIO DE JANEIRO";
     var VALOR_RESERVA = "50.00";
     var SENHA_ADMIN = "admin123";
-    var DB_KEY = "salao_agendamentos_db";
+
+    // Cache local sincronizado com o Supabase
+    var agendamentosCache = [];
 
     // =========================================================
     // GERADOR OFICIAL DE PIX (PADRÃO BANCO CENTRAL + CRC16)
@@ -36,76 +49,87 @@ document.addEventListener('DOMContentLoaded', function () {
         var contaMerchant = formatarCampoEMV("26", gui + chave + infoAdicional);
 
         var payloadSemCRC =
-            formatarCampoEMV("00", "01") +          // Payload Format Indicator
-            contaMerchant +                          // Merchant Account Information
-            formatarCampoEMV("52", "0000") +         // Merchant Category Code
-            formatarCampoEMV("53", "986") +          // Moeda BRL (986)
-            formatarCampoEMV("54", VALOR_RESERVA) +  // Valor R$ 50.00
-            formatarCampoEMV("58", "BR") +           // País
-            formatarCampoEMV("59", NOME_RECEBEDOR) + // Nome do Recebedor
-            formatarCampoEMV("60", CIDADE_RECEBEDOR) + // Cidade
-            formatarCampoEMV("62", formatarCampoEMV("05", "BKSTUDIO50")) + // TXID alfanumérico válido
-            "6304";                                  // Tag do CRC16
+            formatarCampoEMV("00", "01") +
+            contaMerchant +
+            formatarCampoEMV("52", "0000") +
+            formatarCampoEMV("53", "986") +
+            formatarCampoEMV("54", VALOR_RESERVA) +
+            formatarCampoEMV("58", "BR") +
+            formatarCampoEMV("59", NOME_RECEBEDOR) +
+            formatarCampoEMV("60", CIDADE_RECEBEDOR) +
+            formatarCampoEMV("62", formatarCampoEMV("05", "BKSTUDIO50")) +
+            "6304";
 
         return payloadSemCRC + calcularCRC16(payloadSemCRC);
     }
 
     // =========================================================
-    // MINI BANCO DE DADOS LOCAL
+    // BANCO DE DADOS NA NUVEM (SUPABASE)
     // =========================================================
-    var MiniDB = {
-        listarTodos: function () {
-            return JSON.parse(localStorage.getItem(DB_KEY)) || [];
-        },
-        salvarLista: function (lista) {
-            localStorage.setItem(DB_KEY, JSON.stringify(lista));
-        },
-        inserirOuAtualizar: function (registro) {
-            var lista = this.listarTodos();
-            var indice = lista.findIndex(function (item) {
-                return item.id === registro.id;
-            });
-            if (indice !== -1) {
-                lista[indice] = Object.assign({}, lista[indice], registro);
-            } else {
-                lista.push(registro);
+    var CloudDB = {
+        sincronizar: async function () {
+            var res = await supabaseClient
+                .from('agendamentos')
+                .select('*')
+                .order('id', { ascending: true });
+
+            if (!res.error && res.data) {
+                agendamentosCache = res.data;
             }
-            this.salvarLista(lista);
+            return agendamentosCache;
+        },
+        inserir: async function (registro) {
+            var res = await supabaseClient
+                .from('agendamentos')
+                .insert([registro]);
+
+            if (res.error) throw res.error;
+            await this.sincronizar();
             return registro;
         },
+        atualizarDataTurno: async function (id, novaData, novoTurno) {
+            var res = await supabaseClient
+                .from('agendamentos')
+                .update({ data: novaData, turno: novoTurno })
+                .eq('id', id);
+
+            if (res.error) throw res.error;
+            await this.sincronizar();
+        },
+        atualizarStatus: async function (id, novoStatus) {
+            var res = await supabaseClient
+                .from('agendamentos')
+                .update({ status: novoStatus })
+                .eq('id', id);
+
+            if (res.error) throw res.error;
+            await this.sincronizar();
+            return agendamentosCache.find(function (item) {
+                return item.id === id;
+            });
+        },
+        remover: async function (id) {
+            var res = await supabaseClient
+                .from('agendamentos')
+                .delete()
+                .eq('id', id);
+
+            if (res.error) throw res.error;
+            await this.sincronizar();
+        },
         buscarPorTelefone: function (telefone) {
-            var lista = this.listarTodos();
-            for (var i = lista.length - 1; i >= 0; i--) {
-                if (lista[i].telefone === telefone) {
-                    return lista[i];
+            for (var i = agendamentosCache.length - 1; i >= 0; i--) {
+                if (agendamentosCache[i].telefone === telefone) {
+                    return agendamentosCache[i];
                 }
             }
             return null;
         },
-        atualizarStatus: function (id, novoStatus) {
-            var lista = this.listarTodos();
-            var indice = lista.findIndex(function (item) {
-                return item.id === id;
-            });
-            if (indice !== -1) {
-                lista[indice].status = novoStatus;
-                this.salvarLista(lista);
-                return lista[indice];
-            }
-            return null;
-        },
-        remover: function (id) {
-            var filtrados = this.listarTodos().filter(function (item) {
-                return item.id !== id;
-            });
-            this.salvarLista(filtrados);
-        },
         verificarDisponibilidadeDia: function (dataISO, ignorarId) {
-            var lista = this.listarTodos();
             var manhaOcupada = false;
             var tardeOcupada = false;
 
-            lista.forEach(function (item) {
+            agendamentosCache.forEach(function (item) {
                 if (item.data === dataISO && item.id !== ignorarId) {
                     if (item.turno === 'Manhã') manhaOcupada = true;
                     if (item.turno === 'Tarde') tardeOcupada = true;
@@ -139,14 +163,14 @@ document.addEventListener('DOMContentLoaded', function () {
     function isDiaPar(dataISO) {
         if (!dataISO || dataISO.indexOf('-') === -1) return false;
         var partes = dataISO.split('-');
-        var diaNumero = parseInt(partes, 10);
+        var diaNumero = parseInt(partes[2], 10);
         return diaNumero % 2 === 0;
     }
 
     function formatarDataBR(dataISO) {
         if (!dataISO || dataISO.indexOf('-') === -1) return dataISO;
         var partes = dataISO.split('-');
-        return partes + '/' + partes + '/' + partes;
+        return partes[2] + '/' + partes[1] + '/' + partes[0];
     }
 
     function exibirFeedback(htmlTexto) {
@@ -156,7 +180,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function atualizarOpcoesTurnos(dataISO, nomeInputRadio, ignorarId) {
-        var disp = MiniDB.verificarDisponibilidadeDia(dataISO, ignorarId);
+        var disp = CloudDB.verificarDisponibilidadeDia(dataISO, ignorarId);
         var radios = document.querySelectorAll('input[name="' + nomeInputRadio + '"]');
 
         radios.forEach(function (radio) {
@@ -199,7 +223,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var primeiroDiaSemana = new Date(ano, mes, 1).getDay();
         var ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
         var hoje = new Date();
-        var registros = MiniDB.listarTodos();
 
         for (var i = 0; i < primeiroDiaSemana; i++) {
             var vazio = document.createElement('div');
@@ -222,14 +245,15 @@ document.addEventListener('DOMContentLoaded', function () {
                     celula.classList.add('hoje');
                 }
 
-                var disp = MiniDB.verificarDisponibilidadeDia(dataString, null);
-                var agendamentosNoDia = registros.filter(function (item) {
+                var disp = CloudDB.verificarDisponibilidadeDia(dataString, null);
+                var agendamentosNoDia = agendamentosCache.filter(function (item) {
                     return item.data === dataString;
                 });
 
                 if (!ehPar) {
                     celula.classList.add('dia-impar');
                     celula.title = 'Atendimento apenas nos dias pares';
+                } else if (disp.diaLotado) {
                 } else if (disp.diaLotado) {
                     celula.classList.add('dia-lotado');
                     celula.title = 'Sem horários disponíveis neste dia (Manhã e Tarde ocupados)';
@@ -299,14 +323,16 @@ document.addEventListener('DOMContentLoaded', function () {
     if (inputNovaData) {
         inputNovaData.addEventListener('change', function () {
             var tel = document.getElementById('telefoneReagendar').value.trim();
-            var reg = MiniDB.buscarPorTelefone(tel);
+            var reg = CloudDB.buscarPorTelefone(tel);
             atualizarOpcoesTurnos(this.value, 'novoTurno', reg ? reg.id : null);
         });
     }
 
     var btnAbrirAgendar = document.getElementById('btnAbrirAgendar');
     if (btnAbrirAgendar && modalAgendar) {
-        btnAbrirAgendar.addEventListener('click', function () {
+        btnAbrirAgendar.addEventListener('click', async function () {
+            await CloudDB.sincronizar();
+            renderizarCalendario();
             if (dataSelecionadaISO && inputDataAgendamento) {
                 inputDataAgendamento.value = dataSelecionadaISO;
                 atualizarOpcoesTurnos(dataSelecionadaISO, 'turno', null);
@@ -319,7 +345,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var btnAbrirConsultar = document.getElementById('btnAbrirConsultar');
     if (btnAbrirConsultar && modalConsultar) {
-        btnAbrirConsultar.addEventListener('click', function () {
+        btnAbrirConsultar.addEventListener('click', async function () {
+            await CloudDB.sincronizar();
             var res = document.getElementById('resultadoConsulta');
             if (res) res.classList.add('oculto');
             modalConsultar.classList.remove('oculto');
@@ -328,7 +355,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var btnAbrirReagendar = document.getElementById('btnAbrirReagendar');
     if (btnAbrirReagendar && modalReagendar) {
-        btnAbrirReagendar.addEventListener('click', function () {
+        btnAbrirReagendar.addEventListener('click', async function () {
+            await CloudDB.sincronizar();
+            renderizarCalendario();
             if (dataSelecionadaISO && inputNovaData) {
                 inputNovaData.value = dataSelecionadaISO;
                 atualizarOpcoesTurnos(dataSelecionadaISO, 'novoTurno', null);
@@ -363,10 +392,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
-    // FLUXO 1: NOVO AGENDAMENTO -> PIX OFICIAL VÁLIDO
+    // FLUXO 1: NOVO AGENDAMENTO NA NUVEM
     var formAgendar = document.getElementById('formAgendar');
     if (formAgendar) {
-        formAgendar.addEventListener('submit', function (e) {
+        formAgendar.addEventListener('submit', async function (e) {
             e.preventDefault();
 
             var nome = document.getElementById('nome').value.trim();
@@ -385,10 +414,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            var disp = MiniDB.verificarDisponibilidadeDia(data, null);
+            await CloudDB.sincronizar();
+            var disp = CloudDB.verificarDisponibilidadeDia(data, null);
             if ((turnoInput.value === 'Manhã' && disp.manhaOcupada) || (turnoInput.value === 'Tarde' && disp.tardeOcupada)) {
-                alert('Este horário já foi reservado! Por favor, escolha outro turno ou outra data.');
+                alert('Ops! Alguém acabou de reservar esse horário agora mesmo. Escolha outro turno ou data.');
                 atualizarOpcoesTurnos(data, 'turno', null);
+                renderizarCalendario();
                 return;
             }
 
@@ -400,29 +431,32 @@ document.addEventListener('DOMContentLoaded', function () {
                 data: data,
                 turno: turnoInput.value,
                 status: 'Aguardando Pagamento',
-                criadoEm: new Date().toLocaleString('pt-BR')
+                criado_em: new Date().toLocaleString('pt-BR')
             };
 
-            MiniDB.inserirOuAtualizar(novoRegistro);
-            agendamentoEmAndamentoId = novoRegistro.id;
+            try {
+                await CloudDB.inserir(novoRegistro);
+                agendamentoEmAndamentoId = novoRegistro.id;
 
-            formAgendar.reset();
-            if (modalAgendar) modalAgendar.classList.add('oculto');
-            renderizarCalendario();
+                formAgendar.reset();
+                if (modalAgendar) modalAgendar.classList.add('oculto');
+                renderizarCalendario();
 
-            // Gera o código Pix com CRC16 recalculado
-            var codigoPixValido = gerarPixCopiaEColaValido();
-            var inputCopiaCola = document.getElementById('pixCopiaColaInput');
-            var inputChave = document.getElementById('chavePixInput');
-            var imgQr = document.getElementById('qrCodeImagem');
+                var codigoPixValido = gerarPixCopiaEColaValido();
+                var inputCopiaCola = document.getElementById('pixCopiaColaInput');
+                var inputChave = document.getElementById('chavePixInput');
+                var imgQr = document.getElementById('qrCodeImagem');
 
-            if (inputCopiaCola) inputCopiaCola.value = codigoPixValido;
-            if (inputChave) inputChave.value = CHAVE_PIX_EMAIL;
-            if (imgQr) {
-                imgQr.src = 'https://qrserver.com' + encodeURIComponent(codigoPixValido);
+                if (inputCopiaCola) inputCopiaCola.value = codigoPixValido;
+                if (inputChave) inputChave.value = CHAVE_PIX_EMAIL;
+                if (imgQr) {
+                    imgQr.src = 'https://qrserver.com' + encodeURIComponent(codigoPixValido);
+                }
+
+                if (modalPix) modalPix.classList.remove('oculto');
+            } catch (err) {
+                alert('Erro ao salvar agendamento no banco online: ' + err.message);
             }
-
-            if (modalPix) modalPix.classList.remove('oculto');
         });
     }
 
@@ -446,9 +480,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var btnConfirmarPagamento = document.getElementById('btnConfirmarPagamento');
     if (btnConfirmarPagamento) {
-        btnConfirmarPagamento.addEventListener('click', function () {
+        btnConfirmarPagamento.addEventListener('click', async function () {
             if (agendamentoEmAndamentoId) {
-                var registroAtualizado = MiniDB.atualizarStatus(agendamentoEmAndamentoId, 'Aguardando Validação');
+                var registroAtualizado = await CloudDB.atualizarStatus(agendamentoEmAndamentoId, 'Aguardando Validação');
                 if (registroAtualizado) {
                     var linkWpp = document.getElementById('linkWhatsappComprovante');
                     if (linkWpp) {
@@ -475,11 +509,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // FLUXO 2: CONSULTAR AGENDAMENTO
     var formConsultar = document.getElementById('formConsultar');
     if (formConsultar) {
-        formConsultar.addEventListener('submit', function (e) {
+        formConsultar.addEventListener('submit', async function (e) {
             e.preventDefault();
+            await CloudDB.sincronizar();
 
             var telefoneBusca = document.getElementById('telefoneConsulta').value.trim();
-            var encontrado = MiniDB.buscarPorTelefone(telefoneBusca);
+            var encontrado = CloudDB.buscarPorTelefone(telefoneBusca);
             var boxResultado = document.getElementById('resultadoConsulta');
 
             if (!boxResultado) return;
@@ -500,8 +535,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // FLUXO 3: REAGENDAR HORÁRIO
     var formReagendar = document.getElementById('formReagendar');
     if (formReagendar) {
-        formReagendar.addEventListener('submit', function (e) {
+        formReagendar.addEventListener('submit', async function (e) {
             e.preventDefault();
+            await CloudDB.sincronizar();
 
             var telefoneBusca = document.getElementById('telefoneReagendar').value.trim();
             var novaData = document.getElementById('novaData').value;
@@ -517,19 +553,17 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            var encontrado = MiniDB.buscarPorTelefone(telefoneBusca);
+            var encontrado = CloudDB.buscarPorTelefone(telefoneBusca);
 
             if (encontrado) {
-                var disp = MiniDB.verificarDisponibilidadeDia(novaData, encontrado.id);
+                var disp = CloudDB.verificarDisponibilidadeDia(novaData, encontrado.id);
                 if ((novoTurnoInput.value === 'Manhã' && disp.manhaOcupada) || (novoTurnoInput.value === 'Tarde' && disp.tardeOcupada)) {
                     alert('Este horário já foi ocupado por outra cliente! Escolha outro turno ou outra data.');
                     atualizarOpcoesTurnos(novaData, 'novoTurno', encontrado.id);
                     return;
                 }
 
-                encontrado.data = novaData;
-                encontrado.turno = novoTurnoInput.value;
-                MiniDB.inserirOuAtualizar(encontrado);
+                await CloudDB.atualizarDataTurno(encontrado.id, novaData, novoTurnoInput.value);
 
                 formReagendar.reset();
                 if (modalReagendar) modalReagendar.classList.add('oculto');
@@ -541,115 +575,101 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // FLUXO 4: PAINEL ADMINISTRATIVO
+// FLUXO 4: PAINEL ADMINISTRATIVO
     var btnAbrirAdmin = document.getElementById('btnAbrirAdmin');
     if (btnAbrirAdmin && modalAdmin) {
-        btnAbrirAdmin.addEventListener('click', function () {
-            modalAdmin.classList.remove('oculto');
-        });
+    btnAbrirAdmin.addEventListener('click', function () {
+    modalAdmin.classList.remove('oculto');
+    });
     }
-
     var formLoginAdmin = document.getElementById('formLoginAdmin');
     if (formLoginAdmin) {
-        formLoginAdmin.addEventListener('submit', function (e) {
-            e.preventDefault();
-            var senhaDigitada = document.getElementById('senhaAdmin').value;
-            if (senhaDigitada === SENHA_ADMIN) {
-                document.getElementById('adminLoginBox').classList.add('oculto');
-                document.getElementById('adminPainelConteudo').classList.remove('oculto');
-                renderizarPainelAdmin();
-            } else {
-                alert('Senha incorreta!');
-            }
-        });
+    formLoginAdmin.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var senhaDigitada = document.getElementById('senhaAdmin').value;
+    if (senhaDigitada === SENHA_ADMIN) {
+    document.getElementById('adminLoginBox').classList.add('oculto');
+    document.getElementById('adminPainelConteudo').classList.remove('oculto');
+    await CloudDB.sincronizar();
+    renderizarPainelAdmin();
+    } else {
+    alert('Senha incorreta!');
     }
-
+    });
+    }
     function renderizarPainelAdmin() {
-        var lista = MiniDB.listarTodos();
-        var container = document.getElementById('listaAgendamentosAdmin');
-        var contador = document.getElementById('contadorRegistros');
-
-        if (contador) contador.textContent = lista.length + ' agendamento(s) no banco';
-        if (!container) return;
-        container.innerHTML = '';
-
-        if (lista.length === 0) {
-            var vazio = document.createElement('p');
-            vazio.style.textAlign = 'center';
-            vazio.style.padding = '1.5rem';
-            vazio.textContent = 'Nenhum agendamento registrado ainda.';
-            container.appendChild(vazio);
-            return;
-        }
-
-        lista.forEach(function (item) {
-            var card = document.createElement('div');
-            card.classList.add('card-registro-admin');
-
-            var isConfirmado = item.status === 'Confirmado';
-
-            var infoDiv = document.createElement('div');
-            infoDiv.classList.add('info-registro');
-
-            var titulo = document.createElement('h4');
-            titulo.textContent = item.nome + ' ' + item.sobrenome;
-
-            var detalhes = document.createElement('p');
-            detalhes.textContent = '📞 ' + item.telefone + ' | 📅 ' + formatarDataBR(item.data) + ' (' + item.turno + ')';
-
-            var statusSpan = document.createElement('span');
-            statusSpan.classList.add('status-tag', isConfirmado ? 'confirmado' : 'aguardando');
-            statusSpan.textContent = item.status;
-
-            infoDiv.appendChild(titulo);
-            infoDiv.appendChild(detalhes);
-            infoDiv.appendChild(statusSpan);
-
-            var acoesDiv = document.createElement('div');
-            acoesDiv.classList.add('acoes-registro');
-
-            if (!isConfirmado) {
-                var btnValidar = document.createElement('button');
-                btnValidar.classList.add('btn-aprovar');
-                btnValidar.textContent = '✓ Validar';
-                btnValidar.addEventListener('click', function () {
-                    MiniDB.atualizarStatus(item.id, 'Confirmado');
-                    renderizarPainelAdmin();
-                    renderizarCalendario();
-                });
-                acoesDiv.appendChild(btnValidar);
-            }
-
-            var btnExcluir = document.createElement('button');
-            btnExcluir.classList.add('btn-excluir');
-            btnExcluir.textContent = 'Excluir';
-            btnExcluir.addEventListener('click', function () {
-                if (confirm('Deseja realmente remover este agendamento?')) {
-                    MiniDB.remover(item.id);
-                    renderizarPainelAdmin();
-                    renderizarCalendario();
-                }
-            });
-            acoesDiv.appendChild(btnExcluir);
-
-            card.appendChild(infoDiv);
-            card.appendChild(acoesDiv);
-            container.appendChild(card);
-        });
+    var container = document.getElementById('listaAgendamentosAdmin');
+    var contador = document.getElementById('contadorRegistros');
+    if (contador) contador.textContent = agendamentosCache.length + ' agendamento(s) na nuvem';
+    if (!container) return;
+    container.innerHTML = '';
+    if (agendamentosCache.length === 0) {
+    var vazio = document.createElement('p');
+    vazio.style.textAlign = 'center';
+    vazio.style.padding = '1.5rem';
+    vazio.textContent = 'Nenhum agendamento registrado ainda.';
+    container.appendChild(vazio);
+    return;
     }
-
+    agendamentosCache.forEach(function (item) {
+    var card = document.createElement('div');
+    card.classList.add('card-registro-admin');
+    var isConfirmado = item.status === 'Confirmado';
+    var infoDiv = document.createElement('div');
+    infoDiv.classList.add('info-registro');
+    var titulo = document.createElement('h4');
+    titulo.textContent = item.nome + ' ' + item.sobrenome;
+    var detalhes = document.createElement('p');
+    detalhes.textContent = '📞 ' + item.telefone + ' | 📅 ' + formatarDataBR(item.data) + ' (' + item.turno + ')';
+    var statusSpan = document.createElement('span');
+    statusSpan.classList.add('status-tag', isConfirmado ? 'confirmado' : 'aguardando');
+    statusSpan.textContent = item.status;
+    infoDiv.appendChild(titulo);
+    infoDiv.appendChild(detalhes);
+    infoDiv.appendChild(statusSpan);
+    var acoesDiv = document.createElement('div');
+    acoesDiv.classList.add('acoes-registro');
+    if (!isConfirmado) {
+    var btnValidar = document.createElement('button');
+    btnValidar.classList.add('btn-aprovar');
+    btnValidar.textContent = '✓ Validar';
+    btnValidar.addEventListener('click', async function () {
+    await CloudDB.atualizarStatus(item.id, 'Confirmado');
+    renderizarPainelAdmin();
+    renderizarCalendario();
+    });
+    acoesDiv.appendChild(btnValidar);
+    }
+    var btnExcluir = document.createElement('button');
+    btnExcluir.classList.add('btn-excluir');
+    btnExcluir.textContent = 'Excluir';
+    btnExcluir.addEventListener('click', async function () {
+    if (confirm('Deseja realmente remover este agendamento?')) {
+    await CloudDB.remover(item.id);
+    renderizarPainelAdmin();
+    renderizarCalendario();
+    }
+    });
+    acoesDiv.appendChild(btnExcluir);
+    card.appendChild(infoDiv);
+    card.appendChild(acoesDiv);
+    container.appendChild(card);
+    });
+    }
     var btnExportarDB = document.getElementById('btnExportarDB');
-    if (btnExportarDB) {
-        btnExportarDB.addEventListener('click', function () {
-            var dados = JSON.stringify(MiniDB.listarTodos(), null, 2);
+        if (btnExportarDB) {
+            btnExportarDB.addEventListener('click', function () {
+            var dados = JSON.stringify(agendamentosCache, null, 2);
             var blob = new Blob([dados], { type: 'application/json' });
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = 'backup-agendamentos-' + new Date().toISOString().slice(0, 10) + '.json';
+            a.download = 'backup-bkstudio-' + new Date().toISOString().slice(0, 10) + '.json';
             a.click();
-        });
-    }
+            });
+        }
 
+    // Carrega dados da nuvem ao abrir o site
+    await CloudDB.sincronizar();
     renderizarCalendario();
-});
+    });
